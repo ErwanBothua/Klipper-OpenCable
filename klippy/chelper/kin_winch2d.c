@@ -159,39 +159,52 @@ solve_min_norm_T(const double *A, int N, const double Fext[2], double lambda,
 static void
 build_null_projector(const double *A, int N, double lambda, double *P)
 {
-    double S[3][3] = {
-        {lambda, 0., 0.},
-        {0., lambda, 0.},
-        {0., 0., lambda}
+    double S[2][2] = {
+        {lambda, 0.},
+        {0., lambda}
     };
+
     for (int j = 0; j < N; ++j) {
-        double ax = A[0 * N + j], ay = A[1 * N + j], az = A[2 * N + j];
+        double ax = A[0 * N + j];
+        double ay = A[1 * N + j];
+
         S[0][0] += ax * ax;
         S[0][1] += ax * ay;
-        S[0][2] += ax * az;
         S[1][0] += ay * ax;
         S[1][1] += ay * ay;
-        S[1][2] += ay * az;
-        S[2][0] += az * ax;
-        S[2][1] += az * ay;
-        S[2][2] += az * az;
     }
-    double Sinv[3][3];
-    if (!invert3x3(S, Sinv)) {
+
+    double Sinv[2][2];
+
+    if (!invert2x2(S, Sinv)) {
         S[0][0] += 1e-6;
         S[1][1] += 1e-6;
-        S[2][2] += 1e-6;
-        invert3x3(S, Sinv);
+        invert2x2(S, Sinv);
     }
-    for (int r = 0; r < N; ++r) {
-        for (int c = 0; c < N; ++c) {
-            double ax = A[0 * N + c], ay = A[1 * N + c], az = A[2 * N + c];
-            double B0 = Sinv[0][0] * ax + Sinv[0][1] * ay + Sinv[0][2] * az;
-            double B1 = Sinv[1][0] * ax + Sinv[1][1] * ay + Sinv[1][2] * az;
-            double B2 = Sinv[2][0] * ax + Sinv[2][1] * ay + Sinv[2][2] * az;
-            double arx = A[0 * N + r], ary = A[1 * N + r], arz = A[2 * N + r];
-            double Mrc = arx * B0 + ary * B1 + arz * B2;
-            P[r * N + c] = (r == c ? 1.0 : 0.0) - Mrc;
+
+    /*
+     * P = I - A^T * (A * A^T + lambda I)^-1 * A
+     *
+     * P is an N x N projector onto the null-space
+     * of the 2D cable direction matrix A.
+     */
+    for (int i = 0; i < N; ++i) {
+        double aix = A[0 * N + i];
+        double aiy = A[1 * N + i];
+
+        for (int j = 0; j < N; ++j) {
+            double ajx = A[0 * N + j];
+            double ajy = A[1 * N + j];
+
+            double v0 = Sinv[0][0] * ajx
+                      + Sinv[0][1] * ajy;
+
+            double v1 = Sinv[1][0] * ajx
+                      + Sinv[1][1] * ajy;
+
+            double value = aix * v0 + aiy * v1;
+
+            P[i * N + j] = (i == j ? 1. : 0.) - value;
         }
     }
 }
