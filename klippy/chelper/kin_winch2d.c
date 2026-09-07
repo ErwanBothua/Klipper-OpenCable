@@ -94,24 +94,25 @@ build_direction_matrix(struct winch_flex *wf, const struct coord *pos,
 {
     int N = wf->num_anchors;
     int valid = 0;
+
     for (int j = 0; j < N; ++j) {
         double dx = wf->anchors[j].x - pos->x;
         double dy = wf->anchors[j].y - pos->y;
-        double dz = wf->anchors[j].z - pos->z;
-        double norm = hypot3(dx, dy, dz);
+        double norm = hypot2(dx, dy);
+
         if (norm < EPSILON) {
             A[0 * N + j] = 0.;
             A[1 * N + j] = 0.;
-            A[2 * N + j] = 0.;
             continue;
         }
+
         double inv = 1.0 / norm;
         A[0 * N + j] = dx * inv;
         A[1 * N + j] = dy * inv;
-        A[2 * N + j] = dz * inv;
         valid++;
     }
-    return valid >= 3;
+
+    return valid >= 2;
 }
 
 static void
