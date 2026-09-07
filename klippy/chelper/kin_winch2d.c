@@ -20,7 +20,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-#define WINCH_MAX_ANCHORS 26
+#define WINCH_MAX_ANCHORS 20
 #define EPSILON 1e-9
 #define G_ACCEL 9.81
 // LAMBDA is Tikhonov regularization weight in both the Tikhonov and the QP solver.
