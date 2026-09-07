@@ -225,71 +225,85 @@ static_forces_tikhonov(struct winch_flex *wf, const struct coord *pos,
                        double *forces)
 {
     int N = wf->num_anchors;
-    double A[3 * WINCH_MAX_ANCHORS];
+    double A[2 * WINCH_MAX_ANCHORS];
+
     if (!build_direction_matrix(wf, pos, A))
         return 0;
 
-    double Fext[3] = {0., 0., 0.};
     double T[WINCH_MAX_ANCHORS];
     memset(T, 0, sizeof(T));
-    if (!wf->ignore_gravity) {
-        Fext[2] = wf->mover_weight * G_ACCEL;
-        // base min-norm solution (regularized pseudoinverse)
-        // Magic number LAMBDA (1e-3) is regulatization strength,
-        // damping the least squares problem.
-        // It gives Thikonov a ~milliforce
-        // leeway to make nicer (no blow up) but less exact solutions
-        solve_min_norm_T(A, N, Fext, LAMBDA, T);
-    }
+
+    /*
+     * OpenCable is strictly 2D.
+     *
+     * Gravity is intentionally excluded from the model.
+     * Therefore there is no external Z force and no gravity term.
+     */
 
     if (!wf->ignore_pretension) {
         double P[WINCH_MAX_ANCHORS * WINCH_MAX_ANCHORS];
+
         build_null_projector(A, N, LAMBDA, P);
+
         const double tol = 1e-3;
-        // Magic step_damp number that makes gradient descent typically converge within tol fast
-        // Anything within [0.1, 1.5] works
         const double step_damp = 0.75;
         const int max_iters = 100;
+
         for (int it = 0; it < max_iters; ++it) {
+
             double gradient[WINCH_MAX_ANCHORS];
+
             for (int i = 0; i < N; ++i) {
-                // Gradient from the target objective: 0.5 * (T - T_target)^2
+
                 double target_grad = 0.;
-                // If tension is beyond max, pull strongly back into acceptable range
+
                 if (T[i] > wf->max_force[i])
                     target_grad += T[i] - wf->max_force[i];
-                // If tenson is below min, pull strongly back into acceptable range
+
                 if (T[i] < wf->min_force[i])
                     target_grad += T[i] - wf->min_force[i];
-                // Always pull weakly towards the minvalue
+
                 target_grad += 0.1 * (T[i] - wf->min_force[i]);
+
                 gradient[i] = target_grad;
             }
+
             double d[WINCH_MAX_ANCHORS];
+
             project_nullspace(P, N, gradient, d);
+
             double norm_sq = 0.;
+
             for (int i = 0; i < N; ++i)
                 norm_sq += d[i] * d[i];
-            if (norm_sq < tol * tol) {
+
+            if (norm_sq < tol * tol)
                 break;
-            }
+
             for (int i = 0; i < N; ++i)
                 T[i] -= step_damp * d[i];
         }
 
-        // Hard cap on Tmax and 0 if we don't ignore pretension
-        // Allow negative forces if the user asked for it
-        for (int i=0;i<N;++i){
-            if (wf->min_force[i] >= 0. && T[i] < 0.) T[i] = 0.;
-            if (T[i] > wf->max_force[i]) T[i] = wf->max_force[i];
+        /*
+         * Hard cap on Tmax and zero if pretension is not allowed
+         * to become negative.
+         */
+        for (int i = 0; i < N; ++i) {
+
+            if (wf->min_force[i] >= 0. && T[i] < 0.)
+                T[i] = 0.;
+
+            if (T[i] > wf->max_force[i])
+                T[i] = wf->max_force[i];
         }
     }
 
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < N; ++i)
         forces[i] = T[i];
-    }
+
     for (int i = N; i < WINCH_MAX_ANCHORS; ++i)
         forces[i] = 0.;
+
     return 1;
 }
 
