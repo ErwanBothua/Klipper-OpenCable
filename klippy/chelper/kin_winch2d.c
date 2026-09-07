@@ -116,41 +116,43 @@ build_direction_matrix(struct winch_flex *wf, const struct coord *pos,
 }
 
 static void
-solve_min_norm_T(const double *A, int N, const double Fext[3], double lambda,
+solve_min_norm_T(const double *A, int N, const double Fext[2], double lambda,
                  double *T)
 {
-    double S[3][3] = {
-        {lambda, 0., 0.},
-        {0., lambda, 0.},
-        {0., 0., lambda}
+    double S[2][2] = {
+        {lambda, 0.},
+        {0., lambda}
     };
+
     for (int j = 0; j < N; ++j) {
-        double ax = A[0 * N + j], ay = A[1 * N + j], az = A[2 * N + j];
+        double ax = A[0 * N + j];
+        double ay = A[1 * N + j];
+
         S[0][0] += ax * ax;
         S[0][1] += ax * ay;
-        S[0][2] += ax * az;
         S[1][0] += ay * ax;
         S[1][1] += ay * ay;
-        S[1][2] += ay * az;
-        S[2][0] += az * ax;
-        S[2][1] += az * ay;
-        S[2][2] += az * az;
     }
-    double Sinv[3][3];
-    if (!invert3x3(S, Sinv)) {
+
+    double Sinv[2][2];
+
+    if (!invert2x2(S, Sinv)) {
         S[0][0] += 1e-6;
         S[1][1] += 1e-6;
-        S[2][2] += 1e-6;
-        invert3x3(S, Sinv);
+        invert2x2(S, Sinv);
     }
 
-    double y0 = Sinv[0][0] * Fext[0] + Sinv[0][1] * Fext[1] + Sinv[0][2] * Fext[2];
-    double y1 = Sinv[1][0] * Fext[0] + Sinv[1][1] * Fext[1] + Sinv[1][2] * Fext[2];
-    double y2 = Sinv[2][0] * Fext[0] + Sinv[2][1] * Fext[1] + Sinv[2][2] * Fext[2];
+    double y0 = Sinv[0][0] * Fext[0]
+              + Sinv[0][1] * Fext[1];
+
+    double y1 = Sinv[1][0] * Fext[0]
+              + Sinv[1][1] * Fext[1];
 
     for (int j = 0; j < N; ++j) {
-        double ax = A[0 * N + j], ay = A[1 * N + j], az = A[2 * N + j];
-        T[j] = ax * y0 + ay * y1 + az * y2;
+        double ax = A[0 * N + j];
+        double ay = A[1 * N + j];
+
+        T[j] = ax * y0 + ay * y1;
     }
 }
 
