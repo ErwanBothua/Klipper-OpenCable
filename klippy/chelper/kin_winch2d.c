@@ -69,36 +69,22 @@ hypot2(double dx, double dy)
 }
 
 static int
-invert3x3(const double M[3][3], double Minv[3][3])
+invert2x2(const double M[2][2], double Minv[2][2])
 {
-    double a = M[0][0], b = M[0][1], c = M[0][2];
-    double d = M[1][0], e = M[1][1], f = M[1][2];
-    double g = M[2][0], h = M[2][1], i = M[2][2];
+    double a = M[0][0], b = M[0][1];
+    double c = M[1][0], d = M[1][1];
 
-    double A =  (e * i - f * h);
-    double B = -(d * i - f * g);
-    double C =  (d * h - e * g);
-    double D = -(b * i - c * h);
-    double E =  (a * i - c * g);
-    double F = -(a * h - b * g);
-    double G =  (b * f - c * e);
-    double H = -(a * f - c * d);
-    double I =  (a * e - b * d);
-
-    double det = a * A + b * B + c * C;
+    double det = a * d - b * c;
     if (fabs(det) < EPSILON)
         return 0;
+
     double invdet = 1. / det;
 
-    Minv[0][0] = A * invdet;
-    Minv[0][1] = D * invdet;
-    Minv[0][2] = G * invdet;
-    Minv[1][0] = B * invdet;
-    Minv[1][1] = E * invdet;
-    Minv[1][2] = H * invdet;
-    Minv[2][0] = C * invdet;
-    Minv[2][1] = F * invdet;
-    Minv[2][2] = I * invdet;
+    Minv[0][0] =  d * invdet;
+    Minv[0][1] = -b * invdet;
+    Minv[1][0] = -c * invdet;
+    Minv[1][1] =  a * invdet;
+
     return 1;
 }
 
