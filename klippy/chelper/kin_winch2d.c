@@ -385,23 +385,26 @@ projected_gradient_norm(const double *H, const double *t, const double *f,
 // -------- Bound-constrained ridge LS: H = A^T A + lambda I, f = A^T F --------
 // minimize 0.5 T^T H T - f^T T, s.t. L <= T <= U
 static int
-solve_box_ridge_ls(const double *A, int N, const double Fext[3], double lambda,
+solve_box_ridge_ls(const double *A, int N, const double Fext[2], double lambda,
                    const double *Lbounds, const double *Ubounds,
                    int max_iters, double tol, double *T_out)
 {
     double H[WINCH_MAX_ANCHORS * WINCH_MAX_ANCHORS];
     double f[WINCH_MAX_ANCHORS] = { 0.0 };
+
     for (int i = 0; i < N; ++i) {
         double aix = A[0 * N + i];
         double aiy = A[1 * N + i];
-        double aiz = A[2 * N + i];
-        f[i] = aix * Fext[0] + aiy * Fext[1] + aiz * Fext[2];
+
+        f[i] = aix * Fext[0] + aiy * Fext[1];
+
         for (int j = 0; j <= i; ++j) {
             double ajx = A[0 * N + j];
             double ajy = A[1 * N + j];
-            double ajz = A[2 * N + j];
-            double dot = aix * ajx + aiy * ajy + aiz * ajz;
+
+            double dot = aix * ajx + aiy * ajy;
             double v = dot + (i == j ? lambda : 0.);
+
             H[i * N + j] = v;
             H[j * N + i] = v;
         }
@@ -409,17 +412,23 @@ solve_box_ridge_ls(const double *A, int N, const double Fext[3], double lambda,
 
     double Lfact[WINCH_MAX_ANCHORS * WINCH_MAX_ANCHORS];
     memcpy(Lfact, H, sizeof(double) * N * N);
+
     if (!chol_decompose_spd(Lfact, N))
         return 0;
+
     double t[WINCH_MAX_ANCHORS];
     chol_solve_spd(Lfact, N, f, t);
+
     for (int i = 0; i < N; ++i) {
         double li = Lbounds ? Lbounds[i] : 0.;
         double ui = Ubounds ? Ubounds[i] : DBL_MAX;
+
         if (ui < li)
             ui = li;
+
         if (t[i] < li)
             t[i] = li;
+
         if (t[i] > ui)
             t[i] = ui;
     }
@@ -430,106 +439,145 @@ solve_box_ridge_ls(const double *A, int N, const double Fext[3], double lambda,
     for (int it = 0; it < max_iters; ++it) {
         for (int i = 0; i < N; ++i) {
             double gi = 0.;
+
             for (int j = 0; j < N; ++j)
                 gi += H[i * N + j] * t[j];
+
             g[i] = gi - f[i];
         }
 
         int k = 0;
+
         for (int i = 0; i < N; ++i) {
             double li = Lbounds ? Lbounds[i] : 0.;
             double ui = Ubounds ? Ubounds[i] : DBL_MAX;
+
             if (ui < li)
                 ui = li;
+
             int atL = t[i] <= li + 1e-12;
             int atU = t[i] >= ui - 1e-12;
+
             int violateL = atL && (g[i] < -tol);
             int violateU = atU && (g[i] > tol);
+
             if ((!atL && !atU) || violateL || violateU)
                 free_idx[k++] = i;
         }
 
-        double pgn = projected_gradient_norm(H, t, f, Lbounds, Ubounds, N);
+        double pgn = projected_gradient_norm(
+            H, t, f, Lbounds, Ubounds, N);
+
         if (pgn <= tol)
             break;
 
         if (!k) {
             int best_idx = -1;
             double best = 0.;
+
             for (int i = 0; i < N; ++i) {
                 double li = Lbounds ? Lbounds[i] : 0.;
                 double ui = Ubounds ? Ubounds[i] : DBL_MAX;
+
                 if (ui < li)
                     ui = li;
+
                 int atL = t[i] <= li + 1e-12;
                 int atU = t[i] >= ui - 1e-12;
+
                 double viol = 0.;
+
                 if (atL)
                     viol = fmax(0., -g[i]);
                 else if (atU)
                     viol = fmax(0., g[i]);
+
                 if (viol > best) {
                     best = viol;
                     best_idx = i;
                 }
             }
+
             if (best_idx < 0)
                 break;
+
             free_idx[k++] = best_idx;
         }
 
         int ksize = k;
+
         double Hff[WINCH_MAX_ANCHORS * WINCH_MAX_ANCHORS];
         double gf[WINCH_MAX_ANCHORS];
         double pf[WINCH_MAX_ANCHORS];
+
         for (int p = 0; p < ksize; ++p) {
             int ip = free_idx[p];
+
             gf[p] = g[ip];
+
             for (int q = 0; q < ksize; ++q) {
                 int iq = free_idx[q];
-                Hff[p * ksize + q] = H[ip * N + iq];
+
+                Hff[p * ksize + q] =
+                    H[ip * N + iq];
             }
         }
+
         if (!chol_decompose_spd(Hff, ksize))
             return 0;
+
         for (int i = 0; i < ksize; ++i)
             gf[i] = -gf[i];
+
         chol_solve_spd(Hff, ksize, gf, pf);
 
         double alpha = 1.0;
+
         for (int idx = 0; idx < ksize; ++idx) {
             int i = free_idx[idx];
             double pi = pf[idx];
+
             if (fabs(pi) < 1e-16)
                 continue;
+
             double li = Lbounds ? Lbounds[i] : 0.;
             double ui = Ubounds ? Ubounds[i] : DBL_MAX;
+
             if (ui < li)
                 ui = li;
+
             if (pi > 0.) {
                 double amax = (ui - t[i]) / pi;
+
                 if (amax < alpha)
                     alpha = amax > 0. ? amax : 0.;
             } else if (pi < 0.) {
                 double amax = (li - t[i]) / pi;
+
                 if (amax < alpha)
                     alpha = amax > 0. ? amax : 0.;
             }
         }
+
         if (alpha < 0.)
             alpha = 0.;
 
         for (int idx = 0; idx < ksize; ++idx) {
             int i = free_idx[idx];
+
             t[i] += alpha * pf[idx];
         }
+
         for (int i = 0; i < N; ++i) {
             double li = Lbounds ? Lbounds[i] : 0.;
             double ui = Ubounds ? Ubounds[i] : DBL_MAX;
+
             if (ui < li)
                 ui = li;
+
             if (t[i] < li)
                 t[i] = li;
+
             if (t[i] > ui)
                 t[i] = ui;
         }
@@ -537,9 +585,9 @@ solve_box_ridge_ls(const double *A, int N, const double Fext[3], double lambda,
 
     for (int i = 0; i < N; ++i)
         T_out[i] = t[i];
+
     return 1;
 }
-
 static int
 static_forces_qp(struct winch_flex *wf, const struct coord *pos,
                  double *forces)
