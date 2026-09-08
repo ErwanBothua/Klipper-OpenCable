@@ -63,125 +63,101 @@ struct winch_stepper {
 };
 
 static inline double
-hypot2(double dx, double dy)
-{
+hypot2(double dx, double dy){
     return sqrt(dx*dx + dy*dy);
 }
 
 static int
-invert2x2(const double M[2][2], double Minv[2][2])
-{
+invert2x2(const double M[2][2], double Minv[2][2]){
     double a = M[0][0], b = M[0][1];
     double c = M[1][0], d = M[1][1];
 
     double det = a * d - b * c;
     if (fabs(det) < EPSILON)
         return 0;
-
     double invdet = 1. / det;
 
     Minv[0][0] =  d * invdet;
     Minv[0][1] = -b * invdet;
     Minv[1][0] = -c * invdet;
     Minv[1][1] =  a * invdet;
-
     return 1;
 }
 
 static int
 build_direction_matrix(struct winch_flex *wf, const struct coord *pos,
-                       double *A)
-{
+                       double *A){
     int N = wf->num_anchors;
     int valid = 0;
-
     for (int j = 0; j < N; ++j) {
         double dx = wf->anchors[j].x - pos->x;
         double dy = wf->anchors[j].y - pos->y;
         double norm = hypot2(dx, dy);
-
         if (norm < EPSILON) {
             A[0 * N + j] = 0.;
             A[1 * N + j] = 0.;
             continue;
         }
-
         double inv = 1.0 / norm;
         A[0 * N + j] = dx * inv;
         A[1 * N + j] = dy * inv;
         valid++;
     }
-
     return valid >= 2;
 }
 
 static void
 solve_min_norm_T(const double *A, int N, const double Fext[2], double lambda,
-                 double *T)
-{
+                 double *T){
     double S[2][2] = {
         {lambda, 0.},
         {0., lambda}
     };
-
     for (int j = 0; j < N; ++j) {
         double ax = A[0 * N + j];
         double ay = A[1 * N + j];
-
         S[0][0] += ax * ax;
         S[0][1] += ax * ay;
         S[1][0] += ay * ax;
         S[1][1] += ay * ay;
     }
-
     double Sinv[2][2];
-
     if (!invert2x2(S, Sinv)) {
         S[0][0] += 1e-6;
         S[1][1] += 1e-6;
         invert2x2(S, Sinv);
     }
-
     double y0 = Sinv[0][0] * Fext[0]
               + Sinv[0][1] * Fext[1];
-
     double y1 = Sinv[1][0] * Fext[0]
               + Sinv[1][1] * Fext[1];
-
     for (int j = 0; j < N; ++j) {
         double ax = A[0 * N + j];
         double ay = A[1 * N + j];
-
         T[j] = ax * y0 + ay * y1;
     }
 }
 
 static void
-build_null_projector(const double *A, int N, double lambda, double *P)
-{
+build_null_projector(const double *A, int N, double lambda, double *P){
     double S[2][2] = {
         {lambda, 0.},
         {0., lambda}
     };
-
     for (int j = 0; j < N; ++j) {
         double ax = A[0 * N + j];
         double ay = A[1 * N + j];
-
         S[0][0] += ax * ax;
         S[0][1] += ax * ay;
         S[1][0] += ay * ax;
         S[1][1] += ay * ay;
     }
-
     double Sinv[2][2];
-
     if (!invert2x2(S, Sinv)) {
         S[0][0] += 1e-6;
         S[1][1] += 1e-6;
         invert2x2(S, Sinv);
     }
-
     /*
      * P = I - A^T * (A * A^T + lambda I)^-1 * A
      *
@@ -191,27 +167,21 @@ build_null_projector(const double *A, int N, double lambda, double *P)
     for (int i = 0; i < N; ++i) {
         double aix = A[0 * N + i];
         double aiy = A[1 * N + i];
-
         for (int j = 0; j < N; ++j) {
             double ajx = A[0 * N + j];
             double ajy = A[1 * N + j];
-
             double v0 = Sinv[0][0] * ajx
                       + Sinv[0][1] * ajy;
-
             double v1 = Sinv[1][0] * ajx
                       + Sinv[1][1] * ajy;
-
             double value = aix * v0 + aiy * v1;
-
             P[i * N + j] = (i == j ? 1. : 0.) - value;
         }
     }
 }
 
 static void
-project_nullspace(const double *P, int N, const double *v, double *out)
-{
+project_nullspace(const double *P, int N, const double *v, double *out){
     for (int r = 0; r < N; ++r) {
         double acc = 0.;
         for (int c = 0; c < N; ++c)
@@ -222,77 +192,53 @@ project_nullspace(const double *P, int N, const double *v, double *out)
 
 static int
 static_forces_tikhonov(struct winch_flex *wf, const struct coord *pos,
-                       double *forces)
-{
+                       double *forces){
     int N = wf->num_anchors;
     double A[2 * WINCH_MAX_ANCHORS];
-
     if (!build_direction_matrix(wf, pos, A))
         return 0;
-
     double T[WINCH_MAX_ANCHORS];
     memset(T, 0, sizeof(T));
-
     /*
      * OpenCable is strictly 2D.
      *
      * Gravity is intentionally excluded from the model.
      * Therefore there is no external Z force and no gravity term.
      */
-
     if (!wf->ignore_pretension) {
         double P[WINCH_MAX_ANCHORS * WINCH_MAX_ANCHORS];
-
         build_null_projector(A, N, LAMBDA, P);
-
         const double tol = 1e-3;
         const double step_damp = 0.75;
         const int max_iters = 100;
-
         for (int it = 0; it < max_iters; ++it) {
-
             double gradient[WINCH_MAX_ANCHORS];
-
             for (int i = 0; i < N; ++i) {
-
                 double target_grad = 0.;
-
                 if (T[i] > wf->max_force[i])
                     target_grad += T[i] - wf->max_force[i];
-
                 if (T[i] < wf->min_force[i])
                     target_grad += T[i] - wf->min_force[i];
-
                 target_grad += 0.1 * (T[i] - wf->min_force[i]);
-
                 gradient[i] = target_grad;
             }
-
             double d[WINCH_MAX_ANCHORS];
-
             project_nullspace(P, N, gradient, d);
-
             double norm_sq = 0.;
-
             for (int i = 0; i < N; ++i)
                 norm_sq += d[i] * d[i];
-
             if (norm_sq < tol * tol)
                 break;
-
             for (int i = 0; i < N; ++i)
                 T[i] -= step_damp * d[i];
         }
-
         /*
          * Hard cap on Tmax and zero if pretension is not allowed
          * to become negative.
          */
         for (int i = 0; i < N; ++i) {
-
             if (wf->min_force[i] >= 0. && T[i] < 0.)
                 T[i] = 0.;
-
             if (T[i] > wf->max_force[i])
                 T[i] = wf->max_force[i];
         }
@@ -300,18 +246,14 @@ static_forces_tikhonov(struct winch_flex *wf, const struct coord *pos,
 
     for (int i = 0; i < N; ++i)
         forces[i] = T[i];
-
     for (int i = N; i < WINCH_MAX_ANCHORS; ++i)
         forces[i] = 0.;
-
     return 1;
 }
 
-
 // ---- Cholesky solver for small SPD systems (k x k), row-major in/out -------
 static int
-chol_decompose_spd(double *G, int k)
-{
+chol_decompose_spd(double *G, int k){
     const double eps = 1e-12;
     for (int i = 0; i < k; ++i) {
         for (int j = 0; j <= i; ++j) {
@@ -333,8 +275,7 @@ chol_decompose_spd(double *G, int k)
 }
 
 static void
-chol_solve_spd(const double *L, int k, const double *b, double *x)
-{
+chol_solve_spd(const double *L, int k, const double *b, double *x){
     double y[WINCH_MAX_ANCHORS] = { 0.0 };
     // Solve L y = b
     for (int i = 0; i < k; ++i) {
@@ -357,8 +298,7 @@ chol_solve_spd(const double *L, int k, const double *b, double *x)
 static double
 projected_gradient_norm(const double *H, const double *t, const double *f,
                         const double *Lbounds, const double *Ubounds,
-                        int N)
-{
+                        int N){
     double s2 = 0.;
     for (int i = 0; i < N; ++i) {
         double gi = 0.;
@@ -391,20 +331,15 @@ solve_box_ridge_ls(const double *A, int N, const double Fext[2], double lambda,
 {
     double H[WINCH_MAX_ANCHORS * WINCH_MAX_ANCHORS];
     double f[WINCH_MAX_ANCHORS] = { 0.0 };
-
     for (int i = 0; i < N; ++i) {
         double aix = A[0 * N + i];
         double aiy = A[1 * N + i];
-
         f[i] = aix * Fext[0] + aiy * Fext[1];
-
         for (int j = 0; j <= i; ++j) {
             double ajx = A[0 * N + j];
             double ajy = A[1 * N + j];
-
             double dot = aix * ajx + aiy * ajy;
             double v = dot + (i == j ? lambda : 0.);
-
             H[i * N + j] = v;
             H[j * N + i] = v;
         }
@@ -412,192 +347,137 @@ solve_box_ridge_ls(const double *A, int N, const double Fext[2], double lambda,
 
     double Lfact[WINCH_MAX_ANCHORS * WINCH_MAX_ANCHORS];
     memcpy(Lfact, H, sizeof(double) * N * N);
-
     if (!chol_decompose_spd(Lfact, N))
         return 0;
-
     double t[WINCH_MAX_ANCHORS];
     chol_solve_spd(Lfact, N, f, t);
-
     for (int i = 0; i < N; ++i) {
         double li = Lbounds ? Lbounds[i] : 0.;
         double ui = Ubounds ? Ubounds[i] : DBL_MAX;
-
         if (ui < li)
             ui = li;
-
         if (t[i] < li)
             t[i] = li;
-
         if (t[i] > ui)
             t[i] = ui;
     }
 
     double g[WINCH_MAX_ANCHORS];
     int free_idx[WINCH_MAX_ANCHORS];
-
     for (int it = 0; it < max_iters; ++it) {
         for (int i = 0; i < N; ++i) {
             double gi = 0.;
-
             for (int j = 0; j < N; ++j)
                 gi += H[i * N + j] * t[j];
-
             g[i] = gi - f[i];
         }
-
         int k = 0;
-
         for (int i = 0; i < N; ++i) {
             double li = Lbounds ? Lbounds[i] : 0.;
             double ui = Ubounds ? Ubounds[i] : DBL_MAX;
-
             if (ui < li)
                 ui = li;
-
             int atL = t[i] <= li + 1e-12;
             int atU = t[i] >= ui - 1e-12;
-
             int violateL = atL && (g[i] < -tol);
             int violateU = atU && (g[i] > tol);
-
             if ((!atL && !atU) || violateL || violateU)
                 free_idx[k++] = i;
         }
-
         double pgn = projected_gradient_norm(
             H, t, f, Lbounds, Ubounds, N);
-
         if (pgn <= tol)
             break;
-
         if (!k) {
             int best_idx = -1;
             double best = 0.;
-
             for (int i = 0; i < N; ++i) {
                 double li = Lbounds ? Lbounds[i] : 0.;
                 double ui = Ubounds ? Ubounds[i] : DBL_MAX;
-
                 if (ui < li)
                     ui = li;
-
                 int atL = t[i] <= li + 1e-12;
                 int atU = t[i] >= ui - 1e-12;
-
                 double viol = 0.;
-
                 if (atL)
                     viol = fmax(0., -g[i]);
                 else if (atU)
                     viol = fmax(0., g[i]);
-
                 if (viol > best) {
                     best = viol;
                     best_idx = i;
                 }
             }
-
             if (best_idx < 0)
                 break;
-
             free_idx[k++] = best_idx;
         }
-
         int ksize = k;
-
         double Hff[WINCH_MAX_ANCHORS * WINCH_MAX_ANCHORS];
         double gf[WINCH_MAX_ANCHORS];
         double pf[WINCH_MAX_ANCHORS];
-
         for (int p = 0; p < ksize; ++p) {
             int ip = free_idx[p];
-
             gf[p] = g[ip];
-
             for (int q = 0; q < ksize; ++q) {
                 int iq = free_idx[q];
-
                 Hff[p * ksize + q] =
                     H[ip * N + iq];
             }
         }
-
         if (!chol_decompose_spd(Hff, ksize))
             return 0;
-
         for (int i = 0; i < ksize; ++i)
             gf[i] = -gf[i];
-
         chol_solve_spd(Hff, ksize, gf, pf);
-
         double alpha = 1.0;
-
         for (int idx = 0; idx < ksize; ++idx) {
             int i = free_idx[idx];
             double pi = pf[idx];
-
             if (fabs(pi) < 1e-16)
                 continue;
-
             double li = Lbounds ? Lbounds[i] : 0.;
             double ui = Ubounds ? Ubounds[i] : DBL_MAX;
-
             if (ui < li)
                 ui = li;
-
             if (pi > 0.) {
                 double amax = (ui - t[i]) / pi;
-
                 if (amax < alpha)
                     alpha = amax > 0. ? amax : 0.;
             } else if (pi < 0.) {
                 double amax = (li - t[i]) / pi;
-
                 if (amax < alpha)
                     alpha = amax > 0. ? amax : 0.;
             }
         }
-
         if (alpha < 0.)
             alpha = 0.;
-
         for (int idx = 0; idx < ksize; ++idx) {
             int i = free_idx[idx];
-
             t[i] += alpha * pf[idx];
         }
-
         for (int i = 0; i < N; ++i) {
             double li = Lbounds ? Lbounds[i] : 0.;
             double ui = Ubounds ? Ubounds[i] : DBL_MAX;
-
             if (ui < li)
                 ui = li;
-
             if (t[i] < li)
                 t[i] = li;
-
             if (t[i] > ui)
                 t[i] = ui;
         }
     }
-
     for (int i = 0; i < N; ++i)
         T_out[i] = t[i];
-
     return 1;
 }
 static int
 static_forces_qp(struct winch_flex *wf, const struct coord *pos,
-                 double *forces)
-{
+                 double *forces){
     int N = wf->num_anchors;
-
     double A[2 * WINCH_MAX_ANCHORS];
     if (!build_direction_matrix(wf, pos, A))
         return 0;
-
     /*
      * OpenCable is strictly 2D.
      *
@@ -605,46 +485,35 @@ static_forces_qp(struct winch_flex *wf, const struct coord *pos,
      * Therefore the external force vector contains only X/Y.
      */
     double Fext[2] = { 0., 0. };
-
     double Lbounds[WINCH_MAX_ANCHORS] = { 0. };
     double Ubounds[WINCH_MAX_ANCHORS] = { 0. };
-
     for (int i = 0; i < N; ++i) {
         double li = wf->ignore_pretension ? 0. : wf->min_force[i];
         double ui = wf->max_force[i];
-
         if (ui < li)
             ui = li;
-
         Lbounds[i] = li;
         Ubounds[i] = ui;
     }
-
     /*
      * Solve convex bound-constrained QP.
      */
     const int max_iters = 100;
     const double tol = 1e-3;
-
     double T[WINCH_MAX_ANCHORS];
-
     if (!solve_box_ridge_ls(A, N, Fext, LAMBDA,
                             Lbounds, Ubounds,
                             max_iters, tol, T))
         return 0;
-
     for (int i = 0; i < N; ++i)
         forces[i] = T[i];
-
     for (int i = N; i < WINCH_MAX_ANCHORS; ++i)
         forces[i] = 0.;
-
     return 1;
 }
 static int
 compute_static_forces(struct winch_flex *wf, const struct coord *pos,
-                      double *forces, int algo)
-{
+                      double *forces, int algo){
     int ok = 0;
     if (algo == WINCH_FORCE_ALGO_QP) {
         ok = static_forces_qp(wf, pos, forces);
@@ -659,19 +528,22 @@ compute_static_forces(struct winch_flex *wf, const struct coord *pos,
 }
 
 static void
-compute_flex(struct winch_flex *wf, double x, double y, double z,
-             double *distances, double *flex)
-{
+compute_flex(struct winch_flex *wf, double x, double y,
+             double *distances, double *flex){
     int num = wf->num_anchors;
     struct coord pos;
     pos.x = x;
     pos.y = y;
-    pos.z = z;
+    pos.z = 0.;
+    /*
+     * OpenCable is strictly 2D.
+     *
+     * Cable length is calculated only from X/Y geometry.
+     */
     for (int i = 0; i < num; ++i) {
         double dx = wf->anchors[i].x - x;
         double dy = wf->anchors[i].y - y;
-        double dz = wf->anchors[i].z - z;
-        double dist = hypot3(dx, dy, dz);
+        double dist = hypot2(dx, dy);
         distances[i] = dist;
     }
     if (!wf->enabled) {
@@ -681,22 +553,28 @@ compute_flex(struct winch_flex *wf, double x, double y, double z,
     }
     double forces[WINCH_MAX_ANCHORS];
     memset(forces, 0, sizeof(forces));
-    compute_static_forces(wf, &pos, forces, wf->flex_compensation_algorithm);
+    compute_static_forces(
+        wf, &pos, forces,
+        wf->flex_compensation_algorithm);
+    /*
+     * OpenCable keeps cable flexibility.
+     *
+     * Mechanical advantage and guy wires are intentionally
+     * excluded from the model.
+     *
+     * Therefore the spring length is simply the cable distance.
+     */
     for (int i = 0; i < num; ++i) {
-        double spring_length = distances[i]*wf->mechanical_advantage[i] + wf->guy_wires[i];
+        double spring_length = distances[i];
         if (spring_length < EPSILON)
             spring_length = EPSILON;
-        double spring_k = wf->spring_constant / spring_length;
-        double ma = wf->mechanical_advantage[i];
-        if (ma <= 0.)
-            ma = 1.;
-        flex[i] = -forces[i] / (spring_k * ma);
+        double spring_k =
+            wf->spring_constant / spring_length;
+        flex[i] = -forces[i] / spring_k;
     }
 }
-
 static inline double
-linepos_to_motorpos(struct winch_flex *wf, int idx, double line_pos)
-{
+linepos_to_motorpos(struct winch_flex *wf, int idx, double line_pos){
     if (!wf || idx < 0 || idx >= wf->num_anchors)
         return line_pos;
     if (wf->use_constant_spool_model[idx])
