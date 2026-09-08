@@ -1026,11 +1026,11 @@ winch_flex_configure(struct winch_flex *wf,
 }
 
 void __visible
-winch_flex_calc_arrays(struct winch_flex *wf, double x, double y, double z,
+winch_flex_calc_arrays(struct winch_flex *wf, double x, double y,
                        double *distances_out, double *flex_out){
     if (!wf || wf->num_anchors <= 0)
         return;
-    compute_flex(wf, x, y, z, distances_out, flex_out);
+    compute_flex(wf, x, y, distances_out, flex_out);
 }
 
 void __visible
