@@ -702,21 +702,16 @@ residuals_and_derivatives(struct winch_flex *wf, const double *line_pos, int N,
 
 static void
 accumulate_normals(const double *jac, const double *residuals, int N,
-                   double JTJ[2][2], double grad[2])
-{
+                   double JTJ[2][2], double grad[2]){
     grad[0] = grad[1] = 0.;
-
     JTJ[0][0] = JTJ[0][1] = 0.;
     JTJ[1][0] = JTJ[1][1] = 0.;
-
     for (int i = 0; i < N; ++i) {
         double jx = jac[i * 2 + 0];
         double jy = jac[i * 2 + 1];
         double r = residuals[i];
-
         grad[0] += jx * r;
         grad[1] += jy * r;
-
         JTJ[0][0] += jx * jx;
         JTJ[0][1] += jx * jy;
         JTJ[1][0] += jy * jx;
@@ -725,14 +720,14 @@ accumulate_normals(const double *jac, const double *residuals, int N,
 }
 
 static int
-solve_normal_system(double JTJ[3][3], const double rhs[3], double delta[3])
-{
-    double JTJ_inv[3][3];
-    if (!invert3x3((const double (*)[3])JTJ, JTJ_inv))
+solve_normal_system(double JTJ[2][2], const double rhs[2], double delta[2]){
+    double JTJ_inv[2][2];
+    if (!invert2x2((const double (*)[2])JTJ, JTJ_inv))
         return 0;
-    delta[0] = JTJ_inv[0][0] * rhs[0] + JTJ_inv[0][1] * rhs[1] + JTJ_inv[0][2] * rhs[2];
-    delta[1] = JTJ_inv[1][0] * rhs[0] + JTJ_inv[1][1] * rhs[1] + JTJ_inv[1][2] * rhs[2];
-    delta[2] = JTJ_inv[2][0] * rhs[0] + JTJ_inv[2][1] * rhs[1] + JTJ_inv[2][2] * rhs[2];
+    delta[0] = JTJ_inv[0][0] * rhs[0]
+             + JTJ_inv[0][1] * rhs[1];
+    delta[1] = JTJ_inv[1][0] * rhs[0]
+             + JTJ_inv[1][1] * rhs[1];
     return 1;
 }
 
