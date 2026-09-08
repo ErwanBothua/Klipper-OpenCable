@@ -1059,6 +1059,7 @@ winch_stepper_alloc(struct winch_flex *wf, int index){
     if (wf && index >= 0 && index < wf->num_anchors)
         ws->anchor = wf->anchors[index];
     ws->sk.calc_position_cb = winch_stepper_calc_position;
-    ws->sk.active_flags = AF_X | AF_Y | AF_Z;
+    ws->sk.active_flags = AF_X | AF_Y;
     return &ws->sk;
 }
+
