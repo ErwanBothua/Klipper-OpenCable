@@ -594,40 +594,53 @@ static_forces_qp(struct winch_flex *wf, const struct coord *pos,
 {
     int N = wf->num_anchors;
 
-    double A[3 * WINCH_MAX_ANCHORS];
+    double A[2 * WINCH_MAX_ANCHORS];
     if (!build_direction_matrix(wf, pos, A))
         return 0;
 
-    double Fext[3] = {0., 0., 0.};
-    if (!wf->ignore_gravity)
-        Fext[2] = wf->mover_weight * G_ACCEL;
+    /*
+     * OpenCable is strictly 2D.
+     *
+     * Gravity is intentionally excluded from the model.
+     * Therefore the external force vector contains only X/Y.
+     */
+    double Fext[2] = { 0., 0. };
 
     double Lbounds[WINCH_MAX_ANCHORS] = { 0. };
     double Ubounds[WINCH_MAX_ANCHORS] = { 0. };
+
     for (int i = 0; i < N; ++i) {
         double li = wf->ignore_pretension ? 0. : wf->min_force[i];
         double ui = wf->max_force[i];
+
         if (ui < li)
             ui = li;
+
         Lbounds[i] = li;
         Ubounds[i] = ui;
     }
 
-    // Solve convex QP
+    /*
+     * Solve convex bound-constrained QP.
+     */
     const int max_iters = 100;
     const double tol = 1e-3;
+
     double T[WINCH_MAX_ANCHORS];
-    if (!solve_box_ridge_ls(A, N, Fext, LAMBDA, Lbounds, Ubounds,
+
+    if (!solve_box_ridge_ls(A, N, Fext, LAMBDA,
+                            Lbounds, Ubounds,
                             max_iters, tol, T))
         return 0;
 
     for (int i = 0; i < N; ++i)
         forces[i] = T[i];
+
     for (int i = N; i < WINCH_MAX_ANCHORS; ++i)
         forces[i] = 0.;
+
     return 1;
 }
-
 static int
 compute_static_forces(struct winch_flex *wf, const struct coord *pos,
                       double *forces, int algo)
