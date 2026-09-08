@@ -965,11 +965,8 @@ winch_flex_configure(struct winch_flex *wf,
                      double spring_constant,
                      const double *min_force,
                      const double *max_force,
-                     const double *guy_wires,
                      int flex_compensation_algorithm,
-                     int ignore_gravity,
-                     int ignore_pretension,
-                     const int *mechanical_advantage){
+                     int ignore_pretension){
     if (!wf)
         return;
     if (num_anchors < 0)
@@ -981,26 +978,40 @@ winch_flex_configure(struct winch_flex *wf,
     wf->mover_weight = mover_weight;
     wf->spring_constant = spring_constant;
     wf->flex_compensation_algorithm = flex_compensation_algorithm;
-    wf->ignore_gravity = ignore_gravity;
+    wf->ignore_gravity = 1;
     wf->ignore_pretension = ignore_pretension;
+    /*
+     * OpenCable is strictly 2D.
+     *
+     * The anchor array contains only X/Y coordinates:
+     *
+     *     anchors[i * 2 + 0] = X
+     *     anchors[i * 2 + 1] = Y
+     *
+     * Z does not exist in the winch geometry.
+     */
     for (int i = 0; i < num_anchors; ++i) {
-        wf->anchors[i].x = anchors[i * 3];
-        wf->anchors[i].y = anchors[i * 3 + 1];
-        wf->anchors[i].z = anchors[i * 3 + 2];
+        wf->anchors[i].x = anchors[i * 2];
+        wf->anchors[i].y = anchors[i * 2 + 1];
+        wf->anchors[i].z = 0.;
         wf->min_force[i] = min_force ? min_force[i] : 0.;
         wf->max_force[i] = max_force ? max_force[i] : 120.0;
-        if (guy_wires)
-            wf->guy_wires[i] = guy_wires[i];
-        else
-            wf->guy_wires[i] = 0.;
-        if (mechanical_advantage)
-          wf->mechanical_advantage[i] = mechanical_advantage[i];
-        else
-          wf->mechanical_advantage[i] = 1;
+        /*
+         * Guy wires are removed from the OpenCable model.
+         */
+        wf->guy_wires[i] = 0.;
+        /*
+         * Mechanical advantage is removed from the
+         * OpenCable physical model.
+         */
+        wf->mechanical_advantage[i] = 1;
         set_default_spool_params(wf, i);
     }
+
     for (int i = num_anchors; i < WINCH_MAX_ANCHORS; ++i) {
-        wf->anchors[i].x = wf->anchors[i].y = wf->anchors[i].z = 0.;
+        wf->anchors[i].x = 0.;
+        wf->anchors[i].y = 0.;
+        wf->anchors[i].z = 0.;
         wf->min_force[i] = 0.;
         wf->max_force[i] = 120.0;
         wf->guy_wires[i] = 0.;
