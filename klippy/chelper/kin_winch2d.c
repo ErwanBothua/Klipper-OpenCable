@@ -36,12 +36,9 @@ struct winch_flex {
     int enabled;
     int flex_compensation_algorithm;
     double buildup_factor;
-    double mover_weight;
     double spring_constant;
     double min_force[WINCH_MAX_ANCHORS];
     double max_force[WINCH_MAX_ANCHORS];
-    double guy_wires[WINCH_MAX_ANCHORS];
-    int ignore_gravity;
     int ignore_pretension;
     double distances_origin[WINCH_MAX_ANCHORS];
     int mechanical_advantage[WINCH_MAX_ANCHORS];
