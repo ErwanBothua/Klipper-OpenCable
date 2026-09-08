@@ -913,8 +913,7 @@ recalc_origin(struct winch_flex *wf){
     for (int i = 0; i < num; ++i) {
         double dx = wf->anchors[i].x;
         double dy = wf->anchors[i].y;
-        double dz = wf->anchors[i].z;
-        wf->distances_origin[i] = hypot3(dx, dy, dz);
+        wf->distances_origin[i] = hypot2(dx, dy);
     }
 }
 
