@@ -862,37 +862,37 @@ winch_forward_solve(struct winch_flex *wf, const double *motor_pos,
 }
 
 static double
-calc_position_common(struct winch_stepper *ws, struct move *m, double move_time)
-{
+calc_position_common(struct winch_stepper *ws, struct move *m, double move_time){
     struct coord pos = move_get_coord(m, move_time);
+    /*
+     * OpenCable is strictly 2D.
+     *
+     * Cable length is calculated only from X/Y geometry.
+     * Z is not part of the winch kinematics.
+     */
     double dx = ws->anchor.x - pos.x;
     double dy = ws->anchor.y - pos.y;
-    double dz = ws->anchor.z - pos.z;
-    double dist = hypot3(dx, dy, dz);
+    double dist = hypot2(dx, dy);
     struct winch_flex *wf = ws->wf;
     double line_pos = dist - wf->distances_origin[ws->index];
     if (wf && ws->index < wf->num_anchors && wf->enabled) {
         double distances[WINCH_MAX_ANCHORS];
         double flex[WINCH_MAX_ANCHORS];
-        compute_flex(wf, pos.x, pos.y, pos.z, distances, flex);
+        compute_flex(wf, pos.x, pos.y, distances, flex);
         line_pos += flex[ws->index];
     }
     if (!wf || ws->index >= wf->num_anchors)
         return line_pos;
     return linepos_to_motorpos(wf, ws->index, line_pos);
 }
-
 static double
 winch_stepper_calc_position(struct stepper_kinematics *sk, struct move *m,
-                            double move_time)
-{
+                            double move_time){
     struct winch_stepper *ws = container_of(sk, struct winch_stepper, sk);
     return calc_position_common(ws, m, move_time);
 }
-
 struct winch_flex * __visible
-winch_flex_alloc(void)
-{
+winch_flex_alloc(void){
     struct winch_flex *wf = malloc(sizeof(*wf));
     if (!wf)
         return NULL;
@@ -901,18 +901,15 @@ winch_flex_alloc(void)
 }
 
 void __visible
-winch_flex_free(struct winch_flex *wf)
-{
+winch_flex_free(struct winch_flex *wf){
     free(wf);
 }
 
 static void
-recalc_origin(struct winch_flex *wf)
-{
+recalc_origin(struct winch_flex *wf){
     int num = wf->num_anchors;
     if (num <= 0)
         return;
-
     for (int i = 0; i < num; ++i) {
         double dx = wf->anchors[i].x;
         double dy = wf->anchors[i].y;
@@ -922,8 +919,7 @@ recalc_origin(struct winch_flex *wf)
 }
 
 static void
-set_default_spool_params(struct winch_flex *wf, int idx)
-{
+set_default_spool_params(struct winch_flex *wf, int idx){
     wf->spool_radius[idx] = 0.;
     wf->spool_radius_sq[idx] = 0.;
     wf->k0[idx] = 0.;
@@ -936,8 +932,7 @@ set_default_spool_params(struct winch_flex *wf, int idx)
 void __visible
 winch_flex_set_spool_params(struct winch_flex *wf, int index,
                             double rotation_distance,
-                            double steps_per_rotation)
-{
+                            double steps_per_rotation){
     if (!wf || index < 0 || index >= wf->num_anchors)
         return;
     double ma = wf->mechanical_advantage[index];
@@ -947,12 +942,10 @@ winch_flex_set_spool_params(struct winch_flex *wf, int index,
         ? steps_per_rotation / rotation_distance : 0.;
     wf->steps_per_mm[index] = steps_per_mm;
     wf->inv_steps_per_mm[index] = steps_per_mm > 0. ? 1. / steps_per_mm : 0.;
-
     const double two_pi = 2.0 * M_PI;
     double r0 = rotation_distance > 0. ? (rotation_distance * ma) / two_pi : 0.;
     wf->spool_radius[index] = r0;
     wf->spool_radius_sq[index] = r0 * r0;
-
     double k2 = -wf->buildup_factor * ma;
     wf->k2[index] = k2;
     wf->k0[index] = 0.;
@@ -977,8 +970,7 @@ winch_flex_configure(struct winch_flex *wf,
                      int flex_compensation_algorithm,
                      int ignore_gravity,
                      int ignore_pretension,
-                     const int *mechanical_advantage)
-{
+                     const int *mechanical_advantage){
     if (!wf)
         return;
     if (num_anchors < 0)
@@ -992,19 +984,16 @@ winch_flex_configure(struct winch_flex *wf,
     wf->flex_compensation_algorithm = flex_compensation_algorithm;
     wf->ignore_gravity = ignore_gravity;
     wf->ignore_pretension = ignore_pretension;
-
     for (int i = 0; i < num_anchors; ++i) {
         wf->anchors[i].x = anchors[i * 3];
         wf->anchors[i].y = anchors[i * 3 + 1];
         wf->anchors[i].z = anchors[i * 3 + 2];
         wf->min_force[i] = min_force ? min_force[i] : 0.;
         wf->max_force[i] = max_force ? max_force[i] : 120.0;
-
         if (guy_wires)
             wf->guy_wires[i] = guy_wires[i];
         else
             wf->guy_wires[i] = 0.;
-
         if (mechanical_advantage)
           wf->mechanical_advantage[i] = mechanical_advantage[i];
         else
@@ -1028,16 +1017,14 @@ winch_flex_configure(struct winch_flex *wf,
 
 void __visible
 winch_flex_calc_arrays(struct winch_flex *wf, double x, double y, double z,
-                       double *distances_out, double *flex_out)
-{
+                       double *distances_out, double *flex_out){
     if (!wf || wf->num_anchors <= 0)
         return;
     compute_flex(wf, x, y, z, distances_out, flex_out);
 }
 
 void __visible
-winch_flex_set_enabled(struct winch_flex *wf, int enabled)
-{
+winch_flex_set_enabled(struct winch_flex *wf, int enabled){
     if (!wf)
         return;
     wf->enabled = enabled ? 1 : 0;
@@ -1045,16 +1032,14 @@ winch_flex_set_enabled(struct winch_flex *wf, int enabled)
 
 double __visible
 winch_flex_motor_to_line_pos(struct winch_flex *wf, int index,
-                             double motor_pos)
-{
+                             double motor_pos){
     if (!wf || index < 0 || index >= wf->num_anchors)
         return motor_pos;
     return motorpos_to_linepos(wf, index, motor_pos);
 }
 
 struct stepper_kinematics * __visible
-winch_stepper_alloc(struct winch_flex *wf, int index)
-{
+winch_stepper_alloc(struct winch_flex *wf, int index){
     struct winch_stepper *ws = malloc(sizeof(*ws));
     if (!ws)
         return NULL;
