@@ -702,29 +702,25 @@ residuals_and_derivatives(struct winch_flex *wf, const double *line_pos, int N,
 
 static void
 accumulate_normals(const double *jac, const double *residuals, int N,
-                   double JTJ[3][3], double grad[3])
+                   double JTJ[2][2], double grad[2])
 {
-    grad[0] = grad[1] = grad[2] = 0.;
-    JTJ[0][0] = JTJ[0][1] = JTJ[0][2] = 0.;
-    JTJ[1][0] = JTJ[1][1] = JTJ[1][2] = 0.;
-    JTJ[2][0] = JTJ[2][1] = JTJ[2][2] = 0.;
+    grad[0] = grad[1] = 0.;
+
+    JTJ[0][0] = JTJ[0][1] = 0.;
+    JTJ[1][0] = JTJ[1][1] = 0.;
+
     for (int i = 0; i < N; ++i) {
-        double jx = jac[i * 3 + 0];
-        double jy = jac[i * 3 + 1];
-        double jz = jac[i * 3 + 2];
+        double jx = jac[i * 2 + 0];
+        double jy = jac[i * 2 + 1];
         double r = residuals[i];
+
         grad[0] += jx * r;
         grad[1] += jy * r;
-        grad[2] += jz * r;
+
         JTJ[0][0] += jx * jx;
         JTJ[0][1] += jx * jy;
-        JTJ[0][2] += jx * jz;
         JTJ[1][0] += jy * jx;
         JTJ[1][1] += jy * jy;
-        JTJ[1][2] += jy * jz;
-        JTJ[2][0] += jz * jx;
-        JTJ[2][1] += jz * jy;
-        JTJ[2][2] += jz * jz;
     }
 }
 
