@@ -814,12 +814,12 @@ solve_hybrid_halley(struct winch_flex *wf, const double *line_pos, int N,
         *cost_out = cost;
     return converged;
 }
+
 int __visible
 winch_forward_solve(struct winch_flex *wf, const double *motor_pos,
                     const double *initial_guess, double eta, double tol,
                     int halley_iters, int max_iters,
-                    double *out_pos, double *out_cost, int *out_iters)
-{
+                    double *out_pos, double *out_cost, int *out_iters){
     if (!wf || !motor_pos || !out_pos)
         return 0;
     int N = wf->num_anchors;
@@ -832,26 +832,33 @@ winch_forward_solve(struct winch_flex *wf, const double *motor_pos,
     double line_pos[WINCH_MAX_ANCHORS];
     for (int i = 0; i < N; ++i)
         line_pos[i] = motorpos_to_linepos(wf, i, motor_pos[i]);
-
     struct coord pos;
+    /*
+     * OpenCable is strictly 2D.
+     *
+     * Only X/Y are part of the forward kinematic solve.
+     * Z is not an independent winch-kinematic coordinate.
+     */
     pos.x = initial_guess ? initial_guess[0] : 0.;
     pos.y = initial_guess ? initial_guess[1] : 0.;
-    pos.z = initial_guess ? initial_guess[2] : 0.;
-
+    pos.z = 0.;
     double cost = 0.;
     int iters = 0;
-    int ok = solve_hybrid_halley(wf, line_pos, N, &pos, eta, tol,
-                                 halley_iters, max_iters, &cost, &iters);
+    int ok = solve_hybrid_halley(
+        wf, line_pos, N, &pos, eta, tol,
+        halley_iters, max_iters, &cost, &iters);
     out_pos[0] = pos.x;
     out_pos[1] = pos.y;
-    out_pos[2] = pos.z;
+    /*
+     * Keep the third coordinate in the C API storage,
+     * but it is not calculated by the 2D winch kinematics.
+     */
+    out_pos[2] = 0.;
     if (out_cost)
         *out_cost = cost;
     if (out_iters)
         *out_iters = iters;
-    if (!ok || cost > 10.)
-        return 0;
-    return 1;
+    return ok;
 }
 
 static double
