@@ -735,87 +735,77 @@ static int
 solve_hybrid_halley(struct winch_flex *wf, const double *line_pos, int N,
                     struct coord *pos, double eta, double tol,
                     int halley_iters, int max_iters,
-                    double *cost_out, int *iters_out)
-{
+                    double *cost_out, int *iters_out){
     int iter_count = 0;
     int converged = 0;
     double cost = 0.;
     double residuals[WINCH_MAX_ANCHORS];
-    double jac[WINCH_MAX_ANCHORS * 3];
-    double hess[WINCH_MAX_ANCHORS * 9];
+    double jac[WINCH_MAX_ANCHORS * 2];
+    double hess[WINCH_MAX_ANCHORS * 4];
     int hi_limit = halley_iters < max_iters ? halley_iters : max_iters;
-
     for (int iter = 0; iter < hi_limit; ++iter) {
         cost = residuals_and_derivatives(wf, line_pos, N, pos,
                                          residuals, jac, hess);
-        double JTJ[3][3], grad[3];
+        double JTJ[2][2], grad[2];
         accumulate_normals(jac, residuals, N, JTJ, grad);
         JTJ[0][0] += eta;
         JTJ[1][1] += eta;
-        JTJ[2][2] += eta;
-        double rhs1[3] = { -grad[0], -grad[1], -grad[2] };
-        double delta_lm[3];
+        double rhs1[2] = { -grad[0], -grad[1] };
+        double delta_lm[2];
         if (!solve_normal_system(JTJ, rhs1, delta_lm))
             break;
-
-        double Hbar[WINCH_MAX_ANCHORS][3];
+        double Hbar[WINCH_MAX_ANCHORS][2];
         for (int i = 0; i < N; ++i) {
-            double *hrow = hess + i * 9;
-            Hbar[i][0] = delta_lm[0] * hrow[0] + delta_lm[1] * hrow[3] + delta_lm[2] * hrow[6];
-            Hbar[i][1] = delta_lm[0] * hrow[1] + delta_lm[1] * hrow[4] + delta_lm[2] * hrow[7];
-            Hbar[i][2] = delta_lm[0] * hrow[2] + delta_lm[1] * hrow[5] + delta_lm[2] * hrow[8];
+            double *hrow = hess + i * 4;
+            Hbar[i][0] = delta_lm[0] * hrow[0]
+                       + delta_lm[1] * hrow[2];
+            Hbar[i][1] = delta_lm[0] * hrow[1]
+                       + delta_lm[1] * hrow[3];
         }
-
-        double jbar[WINCH_MAX_ANCHORS * 3];
+        double jbar[WINCH_MAX_ANCHORS * 2];
         for (int i = 0; i < N; ++i) {
-            jbar[i * 3 + 0] = jac[i * 3 + 0] + 0.5 * Hbar[i][0];
-            jbar[i * 3 + 1] = jac[i * 3 + 1] + 0.5 * Hbar[i][1];
-            jbar[i * 3 + 2] = jac[i * 3 + 2] + 0.5 * Hbar[i][2];
+            jbar[i * 2 + 0] =
+                jac[i * 2 + 0] + 0.5 * Hbar[i][0];
+            jbar[i * 2 + 1] =
+                jac[i * 2 + 1] + 0.5 * Hbar[i][1];
         }
-
-        double JTJ2[3][3], grad2[3];
+        double JTJ2[2][2], grad2[2];
         accumulate_normals(jbar, residuals, N, JTJ2, grad2);
         JTJ2[0][0] += eta;
         JTJ2[1][1] += eta;
-        JTJ2[2][2] += eta;
-        double rhs2[3] = { -grad2[0], -grad2[1], -grad2[2] };
-        double delta[3];
+        double rhs2[2] = { -grad2[0], -grad2[1] };
+        double delta[2];
         if (!solve_normal_system(JTJ2, rhs2, delta))
             break;
         pos->x += delta[0];
         pos->y += delta[1];
-        pos->z += delta[2];
         iter_count = iter + 1;
-        if (vec_norm3(delta) < tol) {
+        if (hypot2(delta[0], delta[1]) < tol) {
             converged = 1;
             break;
         }
     }
-
     for (int iter = halley_iters; iter < max_iters && !converged; ++iter) {
         cost = residuals_and_derivatives(wf, line_pos, N, pos,
                                          residuals, jac, NULL);
-        double JTJ[3][3], grad[3];
+        double JTJ[2][2], grad[2];
         accumulate_normals(jac, residuals, N, JTJ, grad);
         JTJ[0][0] += eta;
         JTJ[1][1] += eta;
-        JTJ[2][2] += eta;
-        double rhs[3] = { -grad[0], -grad[1], -grad[2] };
-        double delta[3];
+        double rhs[2] = { -grad[0], -grad[1] };
+        double delta[2];
         if (!solve_normal_system(JTJ, rhs, delta))
             break;
         pos->x += delta[0];
         pos->y += delta[1];
-        pos->z += delta[2];
         iter_count = iter + 1;
-        if (vec_norm3(delta) < tol) {
+        if (hypot2(delta[0], delta[1]) < tol) {
             converged = 1;
             break;
         }
     }
-
     double residuals_final[WINCH_MAX_ANCHORS];
-    double jac_tmp[WINCH_MAX_ANCHORS * 3];
+    double jac_tmp[WINCH_MAX_ANCHORS * 2];
     cost = residuals_and_derivatives(wf, line_pos, N, pos,
                                      residuals_final, jac_tmp, NULL);
     if (iters_out)
@@ -824,7 +814,6 @@ solve_hybrid_halley(struct winch_flex *wf, const double *line_pos, int N,
         *cost_out = cost;
     return converged;
 }
-
 int __visible
 winch_forward_solve(struct winch_flex *wf, const double *motor_pos,
                     const double *initial_guess, double eta, double tol,
