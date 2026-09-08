@@ -22,7 +22,6 @@
 
 #define WINCH_MAX_ANCHORS 20
 #define EPSILON 1e-9
-#define G_ACCEL 9.81
 // LAMBDA is Tikhonov regularization weight in both the Tikhonov and the QP solver.
 #define LAMBDA 1e-3
 
@@ -618,37 +617,39 @@ vec_norm3(const double v[3])
 static double
 residuals_and_derivatives(struct winch_flex *wf, const double *line_pos, int N,
                           const struct coord *pos, double *residuals,
-                          double *jac, double *hess)
-{
+                          double *jac, double *hess){
     const double impact_step = 1e-3;
     double base_flex[WINCH_MAX_ANCHORS];
-    double impact_plus[3][WINCH_MAX_ANCHORS];
-    double impact_minus[3][WINCH_MAX_ANCHORS];
+    double impact_plus[2][WINCH_MAX_ANCHORS];
+    double impact_minus[2][WINCH_MAX_ANCHORS];
     memset(base_flex, 0, sizeof(base_flex));
     memset(impact_plus, 0, sizeof(impact_plus));
     memset(impact_minus, 0, sizeof(impact_minus));
-
     if (wf && wf->enabled) {
         double distances[WINCH_MAX_ANCHORS];
-        compute_flex(wf, pos->x, pos->y, pos->z, distances, base_flex);
-        for (int axis = 0; axis < 3; ++axis) {
+        compute_flex(
+            wf, pos->x, pos->y,
+            distances, base_flex);
+        /*
+         * Numerical derivatives are calculated only
+         * for the two winch-kinematic coordinates: X and Y.
+         */
+        for (int axis = 0; axis < 2; ++axis) {
             struct coord shifted = *pos;
             if (axis == 0)
                 shifted.x += impact_step;
-            else if (axis == 1)
-                shifted.y += impact_step;
             else
-                shifted.z += impact_step;
-            compute_flex(wf, shifted.x, shifted.y, shifted.z,
-                         distances, impact_plus[axis]);
+                shifted.y += impact_step;
+            compute_flex(
+                wf, shifted.x, shifted.y,
+                distances, impact_plus[axis]);
             if (axis == 0)
                 shifted.x = pos->x - impact_step;
-            else if (axis == 1)
-                shifted.y = pos->y - impact_step;
             else
-                shifted.z = pos->z - impact_step;
-            compute_flex(wf, shifted.x, shifted.y, shifted.z,
-                         distances, impact_minus[axis]);
+                shifted.y = pos->y - impact_step;
+            compute_flex(
+                wf, shifted.x, shifted.y,
+                distances, impact_minus[axis]);
         }
     }
 
@@ -656,50 +657,50 @@ residuals_and_derivatives(struct winch_flex *wf, const double *line_pos, int N,
     for (int i = 0; i < N; ++i) {
         double dx = pos->x - wf->anchors[i].x;
         double dy = pos->y - wf->anchors[i].y;
-        double dz = pos->z - wf->anchors[i].z;
-        double dist = hypot3(dx, dy, dz);
+        double dist = hypot2(dx, dy);
         if (dist < EPSILON)
             dist = EPSILON;
         double inv_len = 1. / dist;
         double inv_len3 = inv_len * inv_len * inv_len;
-
         double flex = base_flex[i];
-        double found_line_pos = dist - wf->distances_origin[i] + flex;
+        double found_line_pos =
+            dist - wf->distances_origin[i] + flex;
         double res = found_line_pos - line_pos[i];
         if (residuals)
             residuals[i] = res;
-
-        double impact_deriv_x = (impact_plus[0][i] - impact_minus[0][i])
+        double impact_deriv_x =
+            (impact_plus[0][i] - impact_minus[0][i])
             / (2. * impact_step);
-        double impact_deriv_y = (impact_plus[1][i] - impact_minus[1][i])
+        double impact_deriv_y =
+            (impact_plus[1][i] - impact_minus[1][i])
             / (2. * impact_step);
-        double impact_deriv_z = (impact_plus[2][i] - impact_minus[2][i])
-            / (2. * impact_step);
-
         if (jac) {
-            jac[i * 3 + 0] = dx * inv_len + impact_deriv_x;
-            jac[i * 3 + 1] = dy * inv_len + impact_deriv_y;
-            jac[i * 3 + 2] = dz * inv_len + impact_deriv_z;
+            jac[i * 2 + 0] =
+                dx * inv_len + impact_deriv_x;
+            jac[i * 2 + 1] =
+                dy * inv_len + impact_deriv_y;
         }
-
         if (hess) {
-            double *hrow = hess + i * 9;
-            hrow[0] = inv_len - dx * dx * inv_len3;
-            hrow[1] = -dx * dy * inv_len3;
-            hrow[2] = -dx * dz * inv_len3;
-            hrow[3] = -dy * dx * inv_len3;
-            hrow[4] = inv_len - dy * dy * inv_len3;
-            hrow[5] = -dy * dz * inv_len3;
-            hrow[6] = -dz * dx * inv_len3;
-            hrow[7] = -dz * dy * inv_len3;
-            hrow[8] = inv_len - dz * dz * inv_len3;
+            double *hrow = hess + i * 4;
+            /*
+             * Hessian of the 2D Euclidean cable distance:
+             *
+             * [ d2L/dx2   d2L/dxdy ]
+             * [ d2L/dydx  d2L/dy2 ]
+             */
+            hrow[0] =
+                inv_len - dx * dx * inv_len3;
+            hrow[1] =
+                -dx * dy * inv_len3;
+            hrow[2] =
+                -dy * dx * inv_len3;
+            hrow[3] =
+                inv_len - dy * dy * inv_len3;
         }
-
         cost += 0.5 * res * res;
     }
     return cost;
 }
-
 static void
 accumulate_normals(const double *jac, const double *residuals, int N,
                    double JTJ[2][2], double grad[2]){
