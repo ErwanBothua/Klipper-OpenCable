@@ -87,66 +87,49 @@ class WinchFlexHelper:
         anchors_flat = [
             float(coord)
             for anchor in self._anchors
-            for coord in anchor
-        ]
-
+            for coord in anchor]
         anchors_c = self.ffi_main.new(
             "double[]", anchors_flat)
-
         min_c = self.ffi_main.new(
             "double[]", self.min_force)
-
         max_c = self.ffi_main.new(
             "double[]", self.max_force)
-
-        guy_ptr = self.ffi_main.new(
-            "double[]", self.guy_wires)
-
         self.ffi_lib.winch_flex_configure(
             self.ptr,
             self.num,
             anchors_c,
             self.buildup_factor,
-            self.mover_weight,
+            0.,
             self.spring_constant,
             min_c,
             max_c,
-            guy_ptr,
             self.flex_compensation_algorithm,
-            self.ignore_gravity,
-            self.ignore_pretension,
-            self.mechanical_advantage)
-
+            self.ignore_pretension)
+        
     def get_ptr(self):
         if self.ptr is not None:
             return self.ptr
-
         if self.ffi_main is None:
             self.ffi_main, _ = chelper.get_ffi()
-
         return self.ffi_main.NULL
-
+        
     def is_active(self):
         return bool(self.ptr) and bool(self.enabled)
-
+        
     def set_active(self, enable):
         enable = bool(enable)
         self.enabled = enable
-
         if self.ptr and self.ffi_lib is not None:
             self.ffi_lib.winch_flex_set_enabled(
                 self.ptr,
                 1 if enable else 0)
-
         return self.is_active()
-
+        
     def set_spool_params(
             self, index, rotation_distance,
             steps_per_rotation):
-
         if not self.ptr or self.ffi_lib is None:
             return
-
         self.ffi_lib.winch_flex_set_spool_params(
             self.ptr,
             index,
@@ -156,7 +139,6 @@ class WinchFlexHelper:
     def motor_to_line_pos(self, index, motor_pos):
         if not self.ptr or self.ffi_lib is None:
             return motor_pos
-
         return self.ffi_lib.winch_flex_motor_to_line_pos(
             self.ptr,
             index,
@@ -171,49 +153,34 @@ class WinchFlexHelper:
     def calc_arrays(self, pos):
         if not self.ptr or not self.num:
             return [], []
-
         distances = self.ffi_main.new(
             "double[]", self.num)
-
         flex = self.ffi_main.new(
             "double[]", self.num)
-
         self.ffi_lib.winch_flex_calc_arrays(
             self.ptr,
             pos[0],
             pos[1],
             distances,
             flex)
-
         return (
             [distances[i] for i in range(self.num)],
-            [flex[i] for i in range(self.num)]
-        )
-
+            [flex[i] for i in range(self.num)])
 
 def _parse_m569_address(raw_value):
     if raw_value is None:
         return None
-
     text = str(raw_value).strip()
-
     if not text:
         return None
-
     parts = text.split('.', 1)
-
     can_address = int(parts[0])
-
     driver = 0
-
     if len(parts) > 1 and parts[1]:
         driver = int(parts[1])
-
     return {
         'can_address': can_address,
-        'driver': driver
-    }
-
+        'driver': driver}
 
 class WinchKinematics:
     def __init__(self, toolhead, config):
