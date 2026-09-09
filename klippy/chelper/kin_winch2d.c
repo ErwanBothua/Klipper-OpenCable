@@ -959,7 +959,6 @@ winch_flex_configure(struct winch_flex *wf,
                      int num_anchors,
                      const double *anchors,
                      double buildup_factor,
-                     double mover_weight,
                      double spring_constant,
                      const double *min_force,
                      const double *max_force,
@@ -973,10 +972,8 @@ winch_flex_configure(struct winch_flex *wf,
         num_anchors = WINCH_MAX_ANCHORS;
     wf->num_anchors = num_anchors;
     wf->buildup_factor = buildup_factor;
-    wf->mover_weight = mover_weight;
     wf->spring_constant = spring_constant;
     wf->flex_compensation_algorithm = flex_compensation_algorithm;
-    wf->ignore_gravity = 1;
     wf->ignore_pretension = ignore_pretension;
     /*
      * OpenCable is strictly 2D.
@@ -992,15 +989,15 @@ winch_flex_configure(struct winch_flex *wf,
         wf->anchors[i].x = anchors[i * 2];
         wf->anchors[i].y = anchors[i * 2 + 1];
         wf->anchors[i].z = 0.;
-        wf->min_force[i] = min_force ? min_force[i] : 0.;
-        wf->max_force[i] = max_force ? max_force[i] : 120.0;
+        wf->min_force[i] =
+            min_force ? min_force[i] : 0.;
+        wf->max_force[i] =
+            max_force ? max_force[i] : 120.0;
         /*
-         * Guy wires are removed from the OpenCable model.
-         */
-        wf->guy_wires[i] = 0.;
-        /*
-         * Mechanical advantage is removed from the
-         * OpenCable physical model.
+         * Mechanical advantage is currently kept
+         * in the implementation for later review.
+         *
+         * It is not exposed by the OpenCable configuration API.
          */
         wf->mechanical_advantage[i] = 1;
         set_default_spool_params(wf, i);
@@ -1012,7 +1009,6 @@ winch_flex_configure(struct winch_flex *wf,
         wf->anchors[i].z = 0.;
         wf->min_force[i] = 0.;
         wf->max_force[i] = 120.0;
-        wf->guy_wires[i] = 0.;
         wf->mechanical_advantage[i] = 1;
         set_default_spool_params(wf, i);
     }
