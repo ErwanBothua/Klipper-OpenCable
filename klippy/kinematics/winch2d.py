@@ -7,7 +7,6 @@
 import math
 import stepper, mathutil, chelper
 
-
 class WinchFlexHelper:
     ALGORITHMS = {'tikhonov': 0, 'qp': 1}
     ALGO_NAMES = {v: k for k, v in ALGORITHMS.items()}
@@ -15,34 +14,30 @@ class WinchFlexHelper:
     def __init__(self, anchors, config):
         self._anchors = tuple(anchors)
         self.num = len(self._anchors)
-
+        # OpenCable is strictly 2D.
+        #
+        # Each anchor is represented by:
+        #
+        #     (x, y)
+        #
+        # There is no Z coordinate in the winch geometry.
         self.origin_distances = tuple(
-            math.sqrt(anchor[0] * anchor[0]
-                      + anchor[1] * anchor[1])
-            for anchor in self._anchors
-        )
-
+            math.hypot(anchor[0], anchor[1])
+            for anchor in self._anchors)
         self.ptr = None
         self.enabled = False
         self.flex_compensation_algorithm_name = 'qp'
         self.flex_compensation_algorithm = (
-            self.ALGORITHMS[self.flex_compensation_algorithm_name]
-        )
-        self.ignore_gravity = False
+            self.ALGORITHMS[self.flex_compensation_algorithm_name])
         self.ignore_pretension = False
         self.ffi_main = self.ffi_lib = None
-
         self._read_config(config)
-
         if not self.num:
             return
-
         self.ffi_main, self.ffi_lib = chelper.get_ffi()
-
         self.ptr = self.ffi_main.gc(
             self.ffi_lib.winch_flex_alloc(),
             self.ffi_lib.winch_flex_free)
-
         self._configure()
         self.set_active(self.enabled)
 
