@@ -43,64 +43,45 @@ class WinchFlexHelper:
 
     def _read_config(self, config):
         self.buildup_factor = config.getfloat(
-            'winch_buildup_factor', 0., minval=0.)
-
-        self.mover_weight = config.getfloat(
-            'winch_mover_weight', 0., minval=0.)
-
+            'winch_buildup_factor',
+            0.,
+            minval=0.)
         self.spring_constant = config.getfloat(
-            'winch_spring_constant', 0., minval=0.)
-
+            'winch_spring_constant',
+            0.,
+            minval=0.)
         if self.num:
-            default_min = tuple(0. for _ in range(self.num))
-            default_max = tuple(120. for _ in range(self.num))
-
-            default_guy_wires = tuple(0. for _ in range(self.num))
-            default_mechanical_advantage = tuple(
-                1 for _ in range(self.num))
-
-            self.min_force = list(config.getfloatlist(
-                'winch_min_force',
-                default_min,
-                count=self.num))
-
-            self.max_force = list(config.getfloatlist(
-                'winch_max_force',
-                default_max,
-                count=self.num))
-
-            self.guy_wires = list(config.getfloatlist(
-                'winch_guy_wire_lengths',
-                default_guy_wires,
-                count=self.num))
-
-            self.mechanical_advantage = list(config.getintlist(
-                'winch_mechanical_advantage',
-                default_mechanical_advantage,
-                count=self.num))
+            default_min = tuple(
+                0.
+                for _ in range(self.num))
+            default_max = tuple(
+                120.
+                for _ in range(self.num))
+            self.min_force = list(
+                config.getfloatlist(
+                    'winch_min_force',
+                    default_min,
+                    count=self.num))
+            self.max_force = list(
+                config.getfloatlist(
+                    'winch_max_force',
+                    default_max,
+                    count=self.num))
         else:
             self.min_force = []
             self.max_force = []
-            self.guy_wires = []
-            self.mechanical_advantage = []
-
         algo_choices = list(self.ALGORITHMS.keys())
-
         self.flex_compensation_algorithm_name = config.getchoice(
             'flex_compensation_algorithm',
             algo_choices,
             default='qp')
-
         self.flex_compensation_algorithm = (
             self.ALGORITHMS[
                 self.flex_compensation_algorithm_name
             ])
-
-        self.ignore_gravity = config.getboolean(
-            'ignore_gravity', False)
-
         self.ignore_pretension = config.getboolean(
-            'ignore_pretension', False)
+            'ignore_pretension',
+            False)
 
     def _configure(self):
         anchors_flat = [
