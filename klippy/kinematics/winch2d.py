@@ -99,7 +99,6 @@ class WinchFlexHelper:
             self.num,
             anchors_c,
             self.buildup_factor,
-            0.,
             self.spring_constant,
             min_c,
             max_c,
