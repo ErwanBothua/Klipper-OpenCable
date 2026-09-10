@@ -866,7 +866,8 @@ winch_forward_solve(struct winch_flex *wf, const double *motor_pos,
 }
 
 static double
-calc_position_common(struct winch_stepper *ws, struct move *m, double move_time){
+calc_position_common(struct winch_stepper *ws, struct move *m,
+                     double move_time){
     struct coord pos = move_get_coord(m, move_time);
     /*
      * OpenCable is strictly 2D.
@@ -878,17 +879,24 @@ calc_position_common(struct winch_stepper *ws, struct move *m, double move_time)
     double dy = ws->anchor.y - pos.y;
     double dist = hypot2(dx, dy);
     struct winch_flex *wf = ws->wf;
-    double line_pos = dist - wf->distances_origin[ws->index];
-    if (wf && ws->index < wf->num_anchors && wf->enabled) {
+    /*
+     * Without a valid flex configuration, return the raw
+     * geometric cable length.
+     */
+    if (!wf || ws->index < 0 || ws->index >= wf->num_anchors)
+        return dist;
+    double line_pos =
+        dist - wf->distances_origin[ws->index];
+    if (wf->enabled) {
         double distances[WINCH_MAX_ANCHORS];
         double flex[WINCH_MAX_ANCHORS];
         compute_flex(wf, pos.x, pos.y, distances, flex);
         line_pos += flex[ws->index];
     }
-    if (!wf || ws->index >= wf->num_anchors)
-        return line_pos;
-    return linepos_to_motorpos(wf, ws->index, line_pos);
+    return linepos_to_motorpos(
+        wf, ws->index, line_pos);
 }
+
 static double
 winch_stepper_calc_position(struct stepper_kinematics *sk, struct move *m,
                             double move_time){
