@@ -564,8 +564,14 @@ compute_flex(struct winch_flex *wf, double x, double y,
         double spring_length = distances[i];
         if (spring_length < EPSILON)
             spring_length = EPSILON;
+        if (wf->spring_constant <= 0.) {
+            flex[i] = 0.;
+            continue;
+        }
+
         double spring_k =
             wf->spring_constant / spring_length;
+
         flex[i] = -forces[i] / spring_k;
     }
 }
