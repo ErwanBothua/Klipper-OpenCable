@@ -41,7 +41,6 @@ struct winch_flex {
     double max_force[WINCH_MAX_ANCHORS];
     int ignore_pretension;
     double distances_origin[WINCH_MAX_ANCHORS];
-    int mechanical_advantage[WINCH_MAX_ANCHORS];
     double spool_radius[WINCH_MAX_ANCHORS];
     double spool_radius_sq[WINCH_MAX_ANCHORS];
     double k0[WINCH_MAX_ANCHORS];
@@ -946,18 +945,16 @@ winch_flex_set_spool_params(struct winch_flex *wf, int index,
                             double steps_per_rotation){
     if (!wf || index < 0 || index >= wf->num_anchors)
         return;
-    double ma = wf->mechanical_advantage[index];
-    if (ma <= 0.)
-        ma = 1.;
     double steps_per_mm = rotation_distance > 0.
         ? steps_per_rotation / rotation_distance : 0.;
     wf->steps_per_mm[index] = steps_per_mm;
     wf->inv_steps_per_mm[index] = steps_per_mm > 0. ? 1. / steps_per_mm : 0.;
     const double two_pi = 2.0 * M_PI;
-    double r0 = rotation_distance > 0. ? (rotation_distance * ma) / two_pi : 0.;
+    double r0 = rotation_distance > 0.
+        ? rotation_distance / two_pi : 0.;
     wf->spool_radius[index] = r0;
     wf->spool_radius_sq[index] = r0 * r0;
-    double k2 = -wf->buildup_factor * ma;
+    double k2 = -wf->buildup_factor;
     wf->k2[index] = k2;
     wf->k0[index] = 0.;
     wf->use_constant_spool_model[index] = 1;
@@ -1013,7 +1010,6 @@ winch_flex_configure(struct winch_flex *wf,
          *
          * It is not exposed by the OpenCable configuration API.
          */
-        wf->mechanical_advantage[i] = 1;
         set_default_spool_params(wf, i);
     }
 
