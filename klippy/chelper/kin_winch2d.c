@@ -601,11 +601,6 @@ motorpos_to_linepos(struct winch_flex *wf, int idx, double motor_pos)
 }
 
 // ---- Forward transform (motor positions -> Cartesian) ----
-static inline double
-vec_norm3(const double v[3])
-{
-    return sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-}
 
 static double
 residuals_and_derivatives(struct winch_flex *wf, const double *line_pos, int N,
@@ -835,7 +830,6 @@ winch_forward_solve(struct winch_flex *wf, const double *motor_pos,
      */
     pos.x = initial_guess ? initial_guess[0] : 0.;
     pos.y = initial_guess ? initial_guess[1] : 0.;
-    pos.z = 0.;
     double cost = 0.;
     int iters = 0;
     int ok = solve_hybrid_halley(
