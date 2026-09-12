@@ -269,8 +269,8 @@ class WinchKinematics:
 
             s.setup_itersolve(
                 'winch_stepper_alloc',
-                self.anchors[idx][0],
-                self.anchors[idx][1])
+                self.flex_helper.get_ptr(),
+                idx)
 
             s.set_trapq(
                 toolhead.get_trapq())
