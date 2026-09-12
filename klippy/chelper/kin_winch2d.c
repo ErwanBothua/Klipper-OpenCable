@@ -551,14 +551,6 @@ compute_flex(struct winch_flex *wf, double x, double y,
     compute_static_forces(
         wf, &pos, forces,
         wf->flex_compensation_algorithm);
-    /*
-     * OpenCable keeps cable flexibility.
-     *
-     * Mechanical advantage and guy wires are intentionally
-     * excluded from the model.
-     *
-     * Therefore the spring length is simply the cable distance.
-     */
     for (int i = 0; i < num; ++i) {
         double spring_length = distances[i];
         if (spring_length < EPSILON)
