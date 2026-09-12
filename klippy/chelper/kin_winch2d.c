@@ -529,7 +529,6 @@ compute_flex(struct winch_flex *wf, double x, double y,
     struct coord pos;
     pos.x = x;
     pos.y = y;
-    pos.z = 0.;
     /*
      * OpenCable is strictly 2D.
      *
