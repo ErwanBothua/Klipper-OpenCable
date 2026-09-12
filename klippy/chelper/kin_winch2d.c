@@ -805,11 +805,6 @@ winch_forward_solve(struct winch_flex *wf, const double *motor_pos,
         halley_iters, max_iters, &cost, &iters);
     out_pos[0] = pos.x;
     out_pos[1] = pos.y;
-    /*
-     * Keep the third coordinate in the C API storage,
-     * but it is not calculated by the 2D winch kinematics.
-     */
-    out_pos[2] = 0.;
     if (out_cost)
         *out_cost = cost;
     if (out_iters)
