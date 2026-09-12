@@ -102,38 +102,6 @@ build_direction_matrix(struct winch_flex *wf, const struct coord *pos,
 }
 
 static void
-solve_min_norm_T(const double *A, int N, const double Fext[2], double lambda,
-                 double *T){
-    double S[2][2] = {
-        {lambda, 0.},
-        {0., lambda}
-    };
-    for (int j = 0; j < N; ++j) {
-        double ax = A[0 * N + j];
-        double ay = A[1 * N + j];
-        S[0][0] += ax * ax;
-        S[0][1] += ax * ay;
-        S[1][0] += ay * ax;
-        S[1][1] += ay * ay;
-    }
-    double Sinv[2][2];
-    if (!invert2x2(S, Sinv)) {
-        S[0][0] += 1e-6;
-        S[1][1] += 1e-6;
-        invert2x2(S, Sinv);
-    }
-    double y0 = Sinv[0][0] * Fext[0]
-              + Sinv[0][1] * Fext[1];
-    double y1 = Sinv[1][0] * Fext[0]
-              + Sinv[1][1] * Fext[1];
-    for (int j = 0; j < N; ++j) {
-        double ax = A[0 * N + j];
-        double ay = A[1 * N + j];
-        T[j] = ax * y0 + ay * y1;
-    }
-}
-
-static void
 build_null_projector(const double *A, int N, double lambda, double *P){
     double S[2][2] = {
         {lambda, 0.},
