@@ -947,7 +947,6 @@ winch_flex_configure(struct winch_flex *wf,
     for (int i = 0; i < num_anchors; ++i) {
         wf->anchors[i].x = anchors[i * 2];
         wf->anchors[i].y = anchors[i * 2 + 1];
-        wf->anchors[i].z = 0.;
         wf->min_force[i] =
             min_force ? min_force[i] : 0.;
         wf->max_force[i] =
@@ -964,7 +963,6 @@ winch_flex_configure(struct winch_flex *wf,
     for (int i = num_anchors; i < WINCH_MAX_ANCHORS; ++i) {
         wf->anchors[i].x = 0.;
         wf->anchors[i].y = 0.;
-        wf->anchors[i].z = 0.;
         wf->min_force[i] = 0.;
         wf->max_force[i] = 120.0;
         set_default_spool_params(wf, i);
