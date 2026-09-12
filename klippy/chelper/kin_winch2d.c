@@ -1019,7 +1019,6 @@ winch_flex_configure(struct winch_flex *wf,
         wf->anchors[i].z = 0.;
         wf->min_force[i] = 0.;
         wf->max_force[i] = 120.0;
-        wf->mechanical_advantage[i] = 1;
         set_default_spool_params(wf, i);
     }
     if (wf->flex_compensation_algorithm < WINCH_FORCE_ALGO_TIKHONOV
