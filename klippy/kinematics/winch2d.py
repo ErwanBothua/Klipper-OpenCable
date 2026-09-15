@@ -401,9 +401,10 @@ class WinchKinematics:
 
     def set_position(self, newpos, homing_axes):
         xy = list(newpos[:2])
+        winch_pos = [xy[0], xy[1], 0.]
 
         for s in self.steppers:
-            s.set_position(xy)
+            s.set_position(winch_pos)
 
         self.z_rail.set_position(newpos)
 
