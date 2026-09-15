@@ -104,17 +104,17 @@ class WinchFlexHelper:
             max_c,
             self.flex_compensation_algorithm,
             self.ignore_pretension)
-        
+
     def get_ptr(self):
         if self.ptr is not None:
             return self.ptr
         if self.ffi_main is None:
             self.ffi_main, _ = chelper.get_ffi()
         return self.ffi_main.NULL
-        
+
     def is_active(self):
         return bool(self.ptr) and bool(self.enabled)
-        
+
     def set_active(self, enable):
         enable = bool(enable)
         self.enabled = enable
@@ -123,7 +123,7 @@ class WinchFlexHelper:
                 self.ptr,
                 1 if enable else 0)
         return self.is_active()
-        
+
     def set_spool_params(
             self, index, rotation_distance,
             steps_per_rotation):
@@ -179,19 +179,23 @@ def _parse_m569_address(raw_value):
         driver = int(parts[1])
     return {
         'can_address': can_address,
-        'driver': driver}
+        'driver': driver
+    }
 
 class WinchKinematics:
     def __init__(self, toolhead, config):
         self.printer = config.get_printer()
         self.toolhead = toolhead
 
-        # Setup steppers at each anchor
+        # Setup winch steppers at each anchor.
+        # stepper_z is reserved for the independent Cartesian Z axis.
         self.steppers = []
         self.anchors = []
         self.m569_driver_descriptors = []
 
-        for i in range(26):
+        # Keep dynamic winch count support.  Winches use stepper_a through
+        # stepper_y; stepper_z belongs to the independent Cartesian Z rail.
+        for i in range(25):
             name = 'stepper_' + chr(ord('a') + i)
 
             if i >= 3 and not config.has_section(name):
@@ -218,6 +222,14 @@ class WinchKinematics:
 
             self.anchors.append(a)
 
+        # Independent Cartesian Z axis.  This uses Klipper's existing
+        # multi-rail and cartesian stepper implementation; Z is not part
+        # of the winch geometry or kin_winch2d.c.
+        self.z_rail = stepper.LookupMultiRail(
+            config.getsection('stepper_z'))
+        self.z_rail.setup_itersolve(
+            'cartesian_stepper_alloc', b'z')
+
         self.flex_helper = WinchFlexHelper(
             self.anchors,
             config)
@@ -242,6 +254,18 @@ class WinchKinematics:
             'flex_pretension_min_delta',
             0.0005,
             minval=0.)
+
+        max_velocity, max_accel = toolhead.get_max_velocity()
+        self.max_z_velocity = config.getfloat(
+            'max_z_velocity',
+            max_velocity,
+            above=0.,
+            maxval=max_velocity)
+        self.max_z_accel = config.getfloat(
+            'max_z_accel',
+            max_accel,
+            above=0.,
+            maxval=max_accel)
 
         gcode = self.printer.lookup_object('gcode')
 
@@ -272,24 +296,32 @@ class WinchKinematics:
                 self.flex_helper.get_ptr(),
                 idx)
 
-            s.set_trapq(
-                toolhead.get_trapq())
+        # All physical steppers participate in the same toolhead trapq.
+        for s in self.get_steppers():
+            s.set_trapq(toolhead.get_trapq())
 
-        # Setup boundary checks
-        acoords = list(zip(*self.anchors))
-
+        # The actual OpenCable XY workspace limits are intentionally not
+        # defined here yet.  Keep Klipper's standard un-homed state until
+        # the dedicated homing/workspace implementation is added.
+        z_min, z_max = self.z_rail.get_range()
+        if self.anchors:
+            acoords = list(zip(*self.anchors))
+            xy_min = [min(a) for a in acoords]
+            xy_max = [max(a) for a in acoords]
+        else:
+            xy_min = [0., 0.]
+            xy_max = [0., 0.]
         self.axes_min = toolhead.Coord(
-            *[min(a) for a in acoords],
-            e=0.)
-
+            [xy_min[0], xy_min[1], z_min])
         self.axes_max = toolhead.Coord(
-            *[max(a) for a in acoords],
-            e=0.)
+            [xy_max[0], xy_max[1], z_max])
+
+        self.limits = [(1.0, -1.0)] * 3
 
         self._last_forward = [0., 0.]
 
         self.set_position(
-            [0., 0.],
+            [0., 0., 0.],
             "")
 
         # Parameters for the forward transform
@@ -299,7 +331,7 @@ class WinchKinematics:
         self._halley_hybrid_iters = 3
 
     def get_steppers(self):
-        return list(self.steppers)
+        return list(self.steppers) + self.z_rail.get_steppers()
 
     def calc_position(self, stepper_positions):
         flex_ptr = self.flex_helper.get_ptr()
@@ -308,15 +340,16 @@ class WinchKinematics:
         ffi_lib = self.flex_helper.ffi_lib
 
         if not flex_ptr or ffi_main is None or ffi_lib is None:
-            return [None, None]
+            return [None, None, None]
 
         try:
             motor_pos = [
                 stepper_positions[s.get_name()]
                 for s in self.steppers
             ]
+            z_pos = stepper_positions[self.z_rail.get_name()]
         except KeyError:
-            return [None, None]
+            return [None, None, None]
 
         motor_c = ffi_main.new(
             "double[]",
@@ -354,14 +387,15 @@ class WinchKinematics:
             out_iters)
 
         if not ok:
-            return [None, None]
+            return [None, None, None]
 
         result = [
             out_pos[0],
-            out_pos[1]
+            out_pos[1],
+            z_pos
         ]
 
-        self._last_forward = result
+        self._last_forward = result[:2]
 
         return result
 
@@ -371,27 +405,59 @@ class WinchKinematics:
         for s in self.steppers:
             s.set_position(xy)
 
+        self.z_rail.set_position(newpos)
+
+        for axis_name in homing_axes:
+            axis = "xyz".index(axis_name)
+            if axis == 2:
+                self.limits[axis] = self.z_rail.get_range()
+
         if len(xy) >= 2:
             self._last_forward = xy
 
     def clear_homing_state(self, clear_axes):
-        # XXX - homing not implemented
-        pass
+        for axis, axis_name in enumerate("xyz"):
+            if axis_name in clear_axes:
+                self.limits[axis] = (1.0, -1.0)
 
     def home(self, homing_state):
-        # Winch kinematics provides X/Y only.
-        homing_state.set_axes([0, 1])
-        homing_state.set_homed_position(
-            [0., 0.])
-
-    def check_move(self, move):
-        # XXX - boundary checks and speed limits not implemented
+        # Homing is intentionally deferred until the dedicated OpenCable
+        # XYZ homing implementation is added.
         pass
 
+    def _check_endstops(self, move):
+        end_pos = move.end_pos
+        for i in (0, 1, 2):
+            if (move.axes_d[i]
+                and (end_pos[i] < self.limits[i][0]
+                     or end_pos[i] > self.limits[i][1])):
+                if self.limits[i][0] > self.limits[i][1]:
+                    raise move.move_error("Must home axis first")
+                raise move.move_error()
+
+    def check_move(self, move):
+        limits = self.limits
+        xpos, ypos = move.end_pos[:2]
+        if (xpos < limits[0][0] or xpos > limits[0][1]
+            or ypos < limits[1][0] or ypos > limits[1][1]):
+            self._check_endstops(move)
+        if not move.axes_d[2]:
+            return
+        self._check_endstops(move)
+        z_ratio = move.move_d / abs(move.axes_d[2])
+        move.limit_speed(
+            self.max_z_velocity * z_ratio,
+            self.max_z_accel * z_ratio)
+
     def get_status(self, eventtime):
-        # XXX - homed_checks and rail limits not implemented
+        axes = [
+            axis_name
+            for axis_name, (low, high)
+            in zip("xyz", self.limits)
+            if low <= high
+        ]
         return {
-            'homed_axes': 'xy',
+            'homed_axes': "".join(axes),
             'axis_minimum': self.axes_min,
             'axis_maximum': self.axes_max,
         }
