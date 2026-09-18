@@ -195,7 +195,7 @@ class WinchKinematics:
 
         # Keep dynamic winch count support.  Winches use stepper_a through
         # stepper_y; stepper_z belongs to the independent Cartesian Z rail.
-        for i in range(25):
+        for i in range(20):
             name = 'stepper_' + chr(ord('a') + i)
 
             if i >= 3 and not config.has_section(name):
